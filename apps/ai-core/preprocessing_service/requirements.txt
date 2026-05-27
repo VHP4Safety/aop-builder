@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+pydantic
+pymongo
+python-multipart
+pika
+spacy<3.8
+pymupdf4llm 

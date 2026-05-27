@@ -1,0 +1,225 @@
+services:
+  llm_service:
+    image: ollama/ollama:latest
+    container_name: llm-service
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    volumes:
+      - ollama_data:/root/.ollama
+    gpus: all
+
+  llm_init:
+    image: ollama/ollama:latest
+    container_name: llm-init
+    restart: "no"
+    depends_on:
+      - llm_service
+    environment:
+      OLLAMA_HOST: http://llm_service:11434
+      OLLAMA_MODEL: ${LLM_OLLAMA_MODEL}
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+        ollama show "$$OLLAMA_MODEL" >/dev/null 2>&1 || ollama pull "$$OLLAMA_MODEL"
+
+  postgres:
+    image: postgres:16
+    container_name: postgres_db
+    restart: always
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  mongo:
+    image: mongo:latest
+    container_name: mongo_db
+    restart: always
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  rabbitmq:
+    image: rabbitmq:management
+    container_name: rabbitmq_broker
+    restart: always
+    ports:
+      - "127.0.0.1:5672:5672"    # AMQP port
+      - "127.0.0.1:15672:15672"  # RabbitMQ Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  auth_service:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aoptimisten}/auth_service:${IMAGE_TAG:-latest}
+    container_name: auth_service
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ALGORITHM: ${ALGORITHM:-HS256}
+
+  collection_service:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aoptimisten}/collection_service:${IMAGE_TAG:-latest}
+    container_name: collection_service
+    restart: always
+    depends_on:
+      - rabbitmq
+      - postgres
+      - mongo
+    environment:
+      MQ_HOST: rabbitmq_broker
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      STORAGE_URL: mongodb://mongo_db:27017
+
+  session_service:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aoptimisten}/session_service:${IMAGE_TAG:-latest}
+    container_name: session_service
+    restart: always
+    depends_on:
+      - rabbitmq
+      - postgres
+      - mongo
+    environment:
+      MQ_HOST: rabbitmq_broker
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      STORAGE_URL: mongodb://mongo_db:27017
+
+  preprocessing_service:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aoptimisten}/preprocessing_service:${IMAGE_TAG:-latest}
+    container_name: preprocessing_service
+    restart: always
+    depends_on:
+      - rabbitmq
+      - postgres
+      - collection_service
+    environment:
+      MQ_HOST: rabbitmq_broker
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      STORAGE_URL: mongodb://mongo_db:27017
+
+  chunking_service:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aoptimisten}/chunking_service:${IMAGE_TAG:-latest}
+    container_name: chunking_service
+    restart: always
+    depends_on:
+      - rabbitmq
+      - postgres
+      - preprocessing_service
+    environment:
+      MQ_HOST: rabbitmq_broker
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      STORAGE_URL: mongodb://mongo_db:27017
+
+  relevance_service:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aoptimisten}/relevance_service:${IMAGE_TAG:-latest}
+    container_name: relevance_service
+    restart: always
+    depends_on:
+      - rabbitmq
+      - mongo
+      - postgres
+    environment:
+      MQ_HOST: rabbitmq_broker
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      STORAGE_URL: mongodb://mongo_db:27017
+      RELEVANCE_PROVIDER: ${RELEVANCE_PROVIDER}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  cer_service:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aoptimisten}/cer_service:${IMAGE_TAG:-latest}
+    container_name: cer_service
+    restart: always
+    depends_on:
+      - llm_service
+      - rabbitmq
+      - postgres
+    environment:
+      MQ_HOST: rabbitmq_broker
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      STORAGE_URL: mongodb://mongo_db:27017
+      CER_API_BASE_URL: ${CER_API_BASE_URL}
+      CER_API_KEY: ${CER_API_KEY}
+      CER_MODEL_DEFAULT: ${CER_MODEL_DEFAULT}
+      CER_MODEL_QWEN3_14B: ${CER_MODEL_QWEN3_14B}
+      CER_MODEL_DEEPSEEK_R1_14B: ${CER_MODEL_DEEPSEEK_R1_14B}
+      CER_MODEL_QWEN3_8B: ${CER_MODEL_QWEN3_8B}
+      CER_MAX_CONCURRENT_SESSIONS: ${CER_MAX_CONCURRENT_SESSIONS}
+      CER_CONCURRENCY_HEADROOM_FACTOR: ${CER_CONCURRENCY_HEADROOM_FACTOR}
+      CER_CONCURRENCY_MAX_CAP: ${CER_CONCURRENCY_MAX_CAP}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  enrichment_service:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aoptimisten}/enrichment_service:${IMAGE_TAG:-latest}
+    container_name: enrichment_service
+    restart: always
+    depends_on:
+      - rabbitmq
+      - mongo
+      - postgres
+    environment:
+      MQ_HOST: rabbitmq_broker
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      STORAGE_URL: mongodb://mongo_db:27017
+      OLS_BASE_URL: ${OLS_BASE_URL:-https://www.ebi.ac.uk/ols4/api}
+      OLS_SEARCH_ROWS: ${OLS_SEARCH_ROWS:-5}
+      AOP_MCP_BASE_URL: ${AOP_MCP_BASE_URL:-}
+      AOP_MCP_SEARCH_TOOLS: ${AOP_MCP_SEARCH_TOOLS:-search_key_events,search_aops,find_key_events,get_key_event}
+      ENRICHMENT_REQUEST_TIMEOUT_SECONDS: ${ENRICHMENT_REQUEST_TIMEOUT_SECONDS:-20}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  aop-mcp:
+    image: ${AOP_MCP_IMAGE:-docker-stack-aop-mcp:latest}
+    profiles:
+      - aop-mcp
+    restart: unless-stopped
+    environment:
+      AOP_MCP_ENVIRONMENT: production
+      AOP_MCP_LOG_LEVEL: ${AOP_MCP_LOG_LEVEL:-INFO}
+      AOP_MCP_ENABLE_FIXTURE_FALLBACK: ${AOP_MCP_ENABLE_FIXTURE_FALLBACK:-1}
+
+  public_gateway:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aoptimisten}/public_gateway:${IMAGE_TAG:-latest}
+    container_name: public_gateway
+    restart: always
+    ports:
+      - "127.0.0.1:${PUBLIC_GATEWAY_PORT:-8000}:8000"
+    depends_on:
+      - postgres
+      - rabbitmq
+      - auth_service
+      - collection_service
+      - session_service
+    environment:
+      AUTH_SERVICE_URL: http://auth_service:8000
+      COLLECTION_SERVICE_URL: http://collection_service:8000
+      SESSION_SERVICE_URL: http://session_service:8000
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ALGORITHM: ${ALGORITHM:-HS256}
+
+volumes:
+  ollama_data:
+    driver: local
+  postgres_data:
+    driver: local
+  mongo_data:
+    driver: local

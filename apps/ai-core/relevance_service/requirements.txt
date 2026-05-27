@@ -1,0 +1,6 @@
+pika
+sqlalchemy
+psycopg2-binary
+pymongo
+numpy
+requests==2.32.3

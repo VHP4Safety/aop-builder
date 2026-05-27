@@ -1,0 +1,11 @@
+.env
+.DS_Store
+.codex
+
+# Frontend build artifacts
+apps/ai-client/node_modules/
+apps/ai-client/dist/
+
+# Python cache
+apps/ai-core/**/__pycache__/
+apps/ai-core/**/*.pyc

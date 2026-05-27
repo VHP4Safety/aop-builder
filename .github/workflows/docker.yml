@@ -1,0 +1,85 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - auth_service
+          - collection_service
+          - session_service
+          - public_gateway
+          - preprocessing_service
+          - chunking_service
+          - relevance_service
+          - cer_service
+          - enrichment_service
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/ai-core/${{ matrix.service }}
+          file: apps/ai-core/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.service }}:v${{ github.run_number }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.service }}:latest
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ai-client
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/ai-client
+          file: apps/ai-client/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/ai-client:v${{ github.run_number }}
+            ghcr.io/${{ github.repository_owner }}/ai-client:latest
