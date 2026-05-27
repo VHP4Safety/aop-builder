@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Teunis
+    given-names: Marc A.T.
+    orcid: https://orcid.org/0000-0002-3496-6669
+  - family-names: El Fahmi
+    given-names: Yassine
+  - family-names: Maassen
+    given-names: Lucas
+title: aop-builder
+version: 0.1.0
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.20406834
+date-released: 2026-05-27
