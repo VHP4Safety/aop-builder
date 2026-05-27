@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/1214128670.svg)](https://doi.org/10.5281/zenodo.20406834)
+
 # AOP Builder
 
 AOP Builder is a monorepo for document-based adverse outcome pathway analysis. It provides a Vue frontend and a Docker Compose backend that can:
