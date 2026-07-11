@@ -2,7 +2,7 @@
 
 # AOP Builder
 
-AOP Builder is a monorepo for document-based adverse outcome pathway analysis. It provides a Vue frontend and a Docker Compose backend that can:
+AOP Builder is a monorepo for document-based adverse outcome pathway analysis. It provides a Vue frontend and a Docker Compose stack that can:
 
 - upload and manage document collections
 - preprocess and chunk documents
@@ -52,31 +52,26 @@ cp .env.example .env
 
 Use `.env.example` as the source of truth for available settings. At minimum, replace the local database password and JWT secret placeholders before starting the stack.
 
-4. Install frontend dependencies.
+4. Start the stack.
+
+```bash
+./scripts/core-up.sh -d
+```
+
+This builds and starts the backend services plus the containerized frontend. The first run can take time because the `llm_init` container pulls the configured Ollama model into the `ollama_data` volume.
+
+5. Open the frontend at `http://localhost:5173`.
+
+The default backend gateway is exposed on `http://localhost:8005`. The frontend container proxies `/auth`, `/collections`, and `/sessions` to the gateway inside the Compose network.
+
+For active frontend development, you can still run Vite locally instead of using the frontend container:
 
 ```bash
 cd apps/ai-client
 npm install
 cd ../..
-```
-
-5. Start the backend.
-
-```bash
-./scripts/core-up.sh
-```
-
-The first run can take time because the `llm_init` container pulls the configured Ollama model into the `ollama_data` volume.
-
-6. Start the frontend.
-
-```bash
 ./scripts/client-dev.sh
 ```
-
-7. Open the Vite URL printed by the frontend, usually `http://localhost:5173`.
-
-The default backend gateway is exposed on `http://localhost:8005`, matching the example environment and the Vite proxy in `apps/ai-client/vite.config.ts`.
 
 ## Optional AOP-Wiki MCP Enrichment
 
@@ -92,13 +87,13 @@ Without that profile, enrichment still runs with OLS4 normalization and skips AO
 
 ## Useful Commands
 
-Start backend with local builds:
+Start the local stack with local builds:
 
 ```bash
 ./scripts/core-up.sh
 ```
 
-Stop backend:
+Stop the local stack:
 
 ```bash
 ./scripts/core-down.sh
@@ -110,7 +105,7 @@ Build frontend:
 ./scripts/client-build.sh
 ```
 
-Run frontend dev server:
+Run frontend dev server instead of the frontend container:
 
 ```bash
 ./scripts/client-dev.sh
@@ -134,7 +129,7 @@ Backend deployment uses `apps/ai-core/docker-compose-deploy.yml`, which referenc
 
 1. Build and publish images through the root GitHub Actions workflow in `.github/workflows/docker.yml`, or publish equivalent images.
 2. Copy `.env.example` to `.env` on the deployment host and replace all required placeholders.
-3. Set the deploy image registry and tag in `.env` to match the published backend images.
+3. Set the deploy image registry and tag in `.env` to match the published images.
 4. Start the deploy stack:
 
 ```bash
@@ -145,7 +140,7 @@ The deploy compose file binds service ports to `127.0.0.1` by default. Put a rev
 
 Notes:
 
-- The frontend image is built by CI, but it is not currently included in `docker-compose-deploy.yml`. Deploy it separately or add it behind your reverse proxy.
+- The deploy stack includes the frontend image on `FRONTEND_PORT`, bound to `127.0.0.1` by default. Put a reverse proxy in front of it if the UI should be reachable from another host.
 - `aop-mcp` remains optional in deploy as well. Use `COMPOSE_PROFILES=aop-mcp ./scripts/core-deploy.sh` only when the MCP image is available.
 - The workflow uses the built-in GitHub token with package write permissions; no personal access token is required for publishing to the same GitHub organization/user package namespace.
 
@@ -181,7 +176,7 @@ Then replace the required placeholders documented in `.env.example`.
 Check:
 
 - backend containers are running with `cd apps/ai-core && docker compose --env-file ../../.env ps`
-- the gateway port matches the Vite proxy
+- the frontend and gateway ports match `.env`
 - browser requests are going to `/auth`, `/collections`, and `/sessions`
 
 ### Backend Service Restarts
@@ -207,7 +202,7 @@ Check:
 
 Common local ports:
 
-- `5173`: Vite
+- `5173`: frontend container or Vite
 - `8005`: public gateway
 - `11434`: Ollama
 - `5432`: Postgres

@@ -216,6 +216,15 @@ services:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ALGORITHM: ${ALGORITHM:-HS256}
 
+  ai_client:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aoptimisten}/ai-client:${IMAGE_TAG:-latest}
+    container_name: ai_client
+    restart: always
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - public_gateway
+
 volumes:
   ollama_data:
     driver: local

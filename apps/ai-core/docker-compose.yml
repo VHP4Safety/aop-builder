@@ -226,6 +226,16 @@ services:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ALGORITHM: ${ALGORITHM:-HS256}
 
+  ai_client:
+    build:
+      context: ../ai-client
+      dockerfile: Dockerfile
+    container_name: ai_client
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - public_gateway
+
 volumes:
   ollama_data:
     driver: local
